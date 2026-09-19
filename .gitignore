@@ -1,0 +1,9 @@
+# arduino-cli build output
+.build/
+*.bin
+*.elf
+*.map
+
+# OS noise
+.DS_Store
+Thumbs.db
