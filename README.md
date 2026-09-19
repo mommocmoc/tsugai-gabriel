@@ -8,6 +8,9 @@ slam together, flash, hold for a moment, and open again. The on-board QMI8658
 motion sensor picks up the snap as a jolt, so it doesn't matter which way
 round the board sits on your hand.
 
+Hold a finger on the screen and every eye turns to watch it. A quick tap
+bites.
+
 Split out of [esp32-nametag-studio](https://github.com/mommocmoc/esp32-nametag-studio).
 
 ## Hardware
@@ -43,6 +46,8 @@ Everything you're likely to change is in [`gabriel/config.h`](gabriel/config.h):
 | `IDLE_OPEN_PCT` | How wide the jaws stay open while he waits |
 | `INTRO_ON_BOOT` | Play the full arrival (smoke, eyes opening, the stare) at boot |
 | `TOUCH_ENABLED` | A tap on the screen bites too |
+| `EYES_FOLLOW_TOUCH` | Every eye follows a finger held on the screen |
+| `TAP_BITE_MS` | Touches shorter than this bite; longer ones only get watched |
 | `DEBUG_FORCE` | Print the strongest jolt twice a second, to help you pick `SNAP_FORCE` |
 | `SCREEN_BRIGHTNESS`, `SCREEN_ROTATION` | Display |
 

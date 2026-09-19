@@ -73,6 +73,50 @@ static void drawIdle(int tick) {
   loBlit(0, 0, LO_W, LO_H);
 }
 
+#if TOUCH_ENABLED
+// The finger on the glass. Returns true when a short touch has just lifted —
+// that one is a tap, and he bites. While the finger stays down every eye
+// follows it, repainted on each pass through loop(); after it lifts they keep
+// staring at the spot a moment, then wander off.
+static bool watchFinger() {
+  static bool down = false;
+  static unsigned long pressed_at = 0, lifted_at = 0;
+
+  int tx, ty;
+  if (touchGet(&tx, &ty)) {
+    if (!down) { down = true; pressed_at = millis(); }
+#if EYES_FOLLOW_TOUCH
+    bool moved = (tx != gab_tx || ty != gab_ty);
+    gab_tx = tx;
+    gab_ty = ty;
+    if (!gab_watch_ready) {                    // first touch, or just after a bite
+      gabrielWatchBegin((GAB_MAX_GAP * IDLE_OPEN_PCT) / 100);
+      gabrielWatchEyes();
+    } else if (moved) {
+      gabrielWatchEyes();
+    }
+#endif
+    return false;
+  }
+
+  if (down) {                                  // just lifted
+    down = false;
+    lifted_at = millis();
+    return millis() - pressed_at < TAP_BITE_MS;
+  }
+
+  if (gab_tx >= 0) {
+    if (millis() - lifted_at > 600) {
+      gab_tx = gab_ty = -1;                    // lost interest
+    } else if (!gab_watch_ready) {             // a bite repainted the screen
+      gabrielWatchBegin((GAB_MAX_GAP * IDLE_OPEN_PCT) / 100);
+      gabrielWatchEyes();
+    }
+  }
+  return false;
+}
+#endif
+
 static void bite() {
   gabrielChomp((GAB_MAX_GAP * IDLE_OPEN_PCT) / 100);
 }
@@ -100,7 +144,7 @@ void setup() {
   gfx->fillScreen(0x0000);
 
 #if TOUCH_ENABLED
-  if (touchBegin()) Serial.println("[TOUCH] CST816 ready — tap to re-zero");
+  if (touchBegin()) Serial.println("[TOUCH] CST816 ready — tap to bite, hold to be watched");
   else              Serial.println("[TOUCH] none");
 #endif
 
@@ -135,8 +179,7 @@ void loop() {
   bool snap = handSnapped();
 
 #if TOUCH_ENABLED
-  int tx, ty;
-  if (touchTapped(&tx, &ty)) snap = true;     // a tap bites too, for testing
+  if (watchFinger()) snap = true;             // a tap bites too, for testing
 #endif
 
   if (snap && millis() - last_bite >= SNAP_COOLDOWN_MS) {
@@ -147,7 +190,8 @@ void loop() {
   }
 
   // Waiting, but not frozen: the eyes keep moving between bites.
-  if (millis() - last_idle > 420) {
+  // (Not while they're fixed on a finger — watchFinger() owns the eyes then.)
+  if (gab_tx < 0 && millis() - last_idle > 420) {
     last_idle = millis();
     drawIdle(++tick);
   }
@@ -161,5 +205,5 @@ void loop() {
   }
 #endif
 
-  delay(8);
+  delay(gab_tx >= 0 ? 2 : 8);                  // keep up with a moving finger
 }

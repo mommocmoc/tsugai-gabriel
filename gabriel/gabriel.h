@@ -49,6 +49,22 @@ static const GabEye GAB_EYES_LO[] = {
 #define GAB_EYES_UP_N (sizeof(GAB_EYES_UP) / sizeof(GAB_EYES_UP[0]))
 #define GAB_EYES_LO_N (sizeof(GAB_EYES_LO) / sizeof(GAB_EYES_LO[0]))
 
+// Something to stare at, in SCREEN coordinates (320x240). While it is set,
+// every eye turns its own way toward it and `look` is ignored; -1 means
+// nothing to watch.
+static int gab_tx = -1, gab_ty = -1;
+
+// Every open eye drawn by the last gabrielPose(), so the stare can repaint
+// just the eyes (see gabrielWatchEyes below).
+#define GAB_EYES_MAX (GAB_EYES_UP_N + GAB_EYES_LO_N)
+struct GabSpot { int16_t x, y, r; };          // canvas x runs past int8_t
+static GabSpot gab_drawn[GAB_EYES_MAX];
+static int    gab_drawn_n = 0;
+static bool   gab_no_pupils = false;          // draw the whites only
+static bool   gab_watch_ready = false;        // screen holds a pupil-less pose
+
+static int gabPupilR(int r) { return (r < 3) ? 1 : r / 2; }
+
 // One ringed eye: white disc, black pupil, a rim of shadow underneath.
 static void gabEye(int x, int y, int r, int look, bool shut) {
   if (r < 1) return;
@@ -58,12 +74,23 @@ static void gabEye(int x, int y, int r, int look, bool shut) {
   }
   lo->fillCircle(x, y + 1, r, B_EYE_RIM);
   lo->fillCircle(x, y, r, B_EYE);
-  int pr = (r < 3) ? 1 : r / 2;
-  int reach = r - pr - 1;                      // or it would slide off the white
+  if (gab_drawn_n < GAB_EYES_MAX) gab_drawn[gab_drawn_n++] = { (int16_t)x, (int16_t)y, (int16_t)r };
+  if (gab_no_pupils) return;
+
+  int pr = gabPupilR(r);
+  int reach = r - pr;                          // any further and it leaves the white
   if (reach < 0) reach = 0;
-  if (look >  reach) look =  reach;
-  if (look < -reach) look = -reach;
-  lo->fillCircle(x + look, y, pr, B_PUPIL);
+
+  int px = look, py = 0;
+  if (gab_tx >= 0) {                           // staring at something
+    int dx = gab_tx - x * 2, dy = gab_ty - y * 2;
+    int len = max(abs(dx), abs(dy));
+    px = (len > 0) ? (dx * reach) / len : 0;
+    py = (len > 0) ? (dy * reach) / len : 0;
+  }
+  if (px >  reach) px =  reach;
+  if (px < -reach) px = -reach;
+  lo->fillCircle(x + px, y + py, pr, B_PUPIL);
 }
 
 /*
@@ -168,10 +195,70 @@ static void gabSmoke(int density, int rise) {
 
 // One live frame, jaws held `gap` apart. Used by the tilt-driven sketch.
 static void gabrielPose(int gap, int look, bool shut) {
+  gab_drawn_n = 0;
+  gab_watch_ready = false;
   lo->fillScreen(B_VOID);
   gabSmoke(30, 1);
   gabJaw(GAB_TOP_EDGE - gap, -1, GAB_THICK, 100, look, shut);
   gabJaw(GAB_BOT_EDGE + gap, +1, GAB_THICK, 100, look, shut);
+}
+
+// ---- The stare ---------------------------------------------------------------
+// While a finger is on the glass the jaws and smoke don't move — only pupils
+// do. So the scene is drawn once with empty whites, and after that each frame
+// repaints just the eyes: every eye box is scaled up from the canvas and its
+// pupil is drawn at the panel's full resolution, then only those boxes go out
+// over SPI. That's a few hundred pixels a frame instead of 76,800.
+
+// Draw the open pose once, whites only, and push the whole screen.
+static void gabrielWatchBegin(int gap) {
+  gab_no_pupils = true;
+  gabrielPose(gap, 0, false);
+  gab_no_pupils = false;
+  loBlit(0, 0, LO_W, LO_H);
+  gab_watch_ready = true;
+}
+
+// Repaint every eye's pupil toward (gab_tx, gab_ty).
+static void gabrielWatchEyes() {
+  if (!gab_watch_ready) return;
+  static uint16_t buf[(2 * 5 + 4) * 2 * (2 * 5 + 5) * 2];
+  uint16_t *fb = lo->getFramebuffer();
+
+  for (int i = 0; i < gab_drawn_n; i++) {
+    const GabSpot &e = gab_drawn[i];
+    int x0 = e.x - e.r - 1, y0 = e.y - e.r - 1;       // canvas box, rim included
+    int w = e.r * 2 + 3, h = e.r * 2 + 4;
+    if (x0 < 0) { w += x0; x0 = 0; }
+    if (y0 < 0) { h += y0; y0 = 0; }
+    if (x0 + w > LO_W) w = LO_W - x0;
+    if (y0 + h > LO_H) h = LO_H - y0;
+    if (w <= 0 || h <= 0 || w * h * 4 > (int)(sizeof(buf) / sizeof(buf[0]))) continue;
+
+    // the pupil, in panel pixels
+    float cx = e.x * 2 + 0.5f, cy = e.y * 2 + 0.5f;
+    float pr = gabPupilR(e.r) * 2 - 0.5f;
+    float reach = (e.r - gabPupilR(e.r)) * 2 + 1.0f;
+    float dx = gab_tx - cx, dy = gab_ty - cy;
+    float len = sqrtf(dx * dx + dy * dy);
+    if (len > reach) { dx *= reach / len; dy *= reach / len; }
+    float px = cx + dx, py = cy + dy;
+
+    const int W = w * 2, H = h * 2;
+    for (int yy = 0; yy < H; yy++) {
+      const uint16_t *src = fb + (y0 + yy / 2) * LO_W + x0;
+      float fy = (y0 * 2 + yy) - py;
+      for (int xx = 0; xx < W; xx++) {
+        uint16_t c = src[xx / 2];
+        if (c == B_EYE) {                              // pupils never leave the white
+          float fx = (x0 * 2 + xx) - px;
+          if (fx * fx + fy * fy <= pr * pr) c = B_PUPIL;
+        }
+        buf[yy * W + xx] = c;
+      }
+    }
+    gfx->draw16bitRGBBitmap(x0 * 2, y0 * 2, buf, W, H);
+  }
 }
 
 // The bite, start to finish: he is waiting open, he takes the hand, the jaws
@@ -198,6 +285,7 @@ static void gabrielChomp(int idle_gap) {
 // ==============================================================================
 static void gabrielPlay() {
   if (!loBegin()) return;
+  gab_watch_ready = false;
 
   const int top_edge_closed = GAB_TOP_EDGE, bot_edge_closed = GAB_BOT_EDGE;
   const int thick = GAB_THICK;

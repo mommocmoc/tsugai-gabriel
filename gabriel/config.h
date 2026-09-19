@@ -36,6 +36,13 @@
 // Tapping the screen bites too, which is handy for testing without a strap.
 #define TOUCH_ENABLED         true
 
+// Hold a finger on the screen and every eye turns to watch it.
+#define EYES_FOLLOW_TOUCH     true
+
+// A touch shorter than this, in milliseconds, counts as a tap and he bites.
+// Hold it longer and he only watches.
+#define TAP_BITE_MS            250
+
 // Print the strongest jolt seen, twice a second, so you can pick SNAP_FORCE.
 // Run ./tools/monitor.sh while you snap your hand, then set this to false.
 #define DEBUG_FORCE           true
