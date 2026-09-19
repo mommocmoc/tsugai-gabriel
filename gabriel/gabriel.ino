@@ -130,6 +130,9 @@ static void message(const char *s) {
 
 void setup() {
   Serial.begin(115200);
+  // With no serial monitor open, nobody drains the USB buffer, and every print
+  // would stall the loop for up to 100ms waiting for room. Drop them instead.
+  Serial.setTxTimeoutMs(0);
   delay(200);
   Serial.println("\n=== Gabriel ===");
 

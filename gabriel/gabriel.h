@@ -235,10 +235,11 @@ static void gabrielWatchEyes() {
     if (y0 + h > LO_H) h = LO_H - y0;
     if (w <= 0 || h <= 0 || w * h * 4 > (int)(sizeof(buf) / sizeof(buf[0]))) continue;
 
-    // the pupil, in panel pixels
+    // the pupil, in panel pixels — the same size it is on the canvas, where a
+    // radius-p circle spans 2p+1 canvas pixels, i.e. 4p+2 panel pixels
     float cx = e.x * 2 + 0.5f, cy = e.y * 2 + 0.5f;
-    float pr = gabPupilR(e.r) * 2 - 0.5f;
-    float reach = (e.r - gabPupilR(e.r)) * 2 + 1.0f;
+    float pr = gabPupilR(e.r) * 2 + 0.5f;
+    float reach = (e.r - gabPupilR(e.r)) * 2 + 0.5f;
     float dx = gab_tx - cx, dy = gab_ty - cy;
     float len = sqrtf(dx * dx + dy * dy);
     if (len > reach) { dx *= reach / len; dy *= reach / len; }
