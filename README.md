@@ -2,6 +2,8 @@
 
 Gabriel (가브리엘): two jaws studded with eyes, worn on the back of your hand.
 
+<img src="docs/media/gabriel.gif" width="360" alt="Gabriel on a board strapped to a hand: the jaws wait open, then snap shut with a flash">
+
 Strap an ESP32-S3 board to your hand like a gauntlet. Gabriel waits with his
 jaws open and his eyes wandering. Snap your fist shut and he bites: the jaws
 slam together, flash, hold for a moment, and open again. The on-board QMI8658
